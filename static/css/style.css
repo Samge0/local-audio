@@ -1,4 +1,3 @@
-<style>
 :root{
   --bg1:#e8ebf2; --bg2:#dfe3ee;
   --glass:rgba(255,255,255,.62);
@@ -335,4 +334,5 @@ input[type=range].sl::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
   /* 唱片旋转是持续装饰动画，压到 0.01ms 会表现为每秒数万圈的疯狂旋转 —— 排除之 */
   .artwork{animation-duration:60s!important}
-}
+}
+
