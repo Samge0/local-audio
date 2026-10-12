@@ -1,0 +1,8 @@
+# K-Course Audio Player 依赖
+# 安装: uv venv --python 3.13 && uv pip install -r requirements.txt
+
+python-dotenv==1.2.4
+
+# --- 仅测试/截图需要（运行播放器本体可不装） ---
+playwright==1.63.0
+pillow==12.1.0
