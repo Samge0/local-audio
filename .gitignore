@@ -13,6 +13,7 @@ venv/
 
 # 音频资产（体积大，不入库；用 extract_audio.py 重新生成）
 audio/
+audio_opus/
 course_src/
 
 # IDE / OS

@@ -90,7 +90,7 @@ kcourse-audio/
 | 变量 | 说明 | 默认 |
 |---|---|---|
 | `COURSE_SRC_DIR` | 视频课程源目录（提取用） | `./course_src` |
-| `AUDIO_DIR` | 音频输出目录 | `./audio` |
+| `AUDIO_DIR` | 音频目录 | `./audio` |
 | `KAUDIO_PORT` | 服务器端口 | `8792` |
 | `FFMPEG_PATH` / `FFPROBE_PATH` | ffmpeg/ffprobe 路径（留空用 PATH） | PATH 查找 |
 | `CACHE_DIR` | 本地测试产物目录 | `./.cache` |
