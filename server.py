@@ -198,14 +198,6 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/list":
             items = scan_audio_with_dur()
             return self._json({"ok": True, "count": len(items), "items": items})
-        if path == "/api/status":
-            st = {}
-            if settings.STATUS_FILE.exists():
-                try:
-                    st = json.loads(settings.STATUS_FILE.read_text("utf-8"))
-                except Exception:
-                    pass
-            return self._json({"ok": True, **st})
         if path.startswith(AUDIO_URL_PREFIX):
             p = self._resolve_audio(path)
             if p is None:

@@ -1,13 +1,12 @@
 # K-Course Audio Player
 
-程序员 K 哥 2.0 课程视频的音频提取 + Mac 风格 WebUI 播放器（单文件前端、零前端依赖、Python 标准库后端）。
+课程音频的 Mac 风格 WebUI 播放器（单文件前端、零前端依赖、Python 标准库后端）。
 
 ![桌面版](.cache/shot-desktop.png)
 
 ## 功能
 
-- **音频提取**：遍历源目录所有视频，AAC 音轨无损封装 `.m4a`（其他编码转 MP3），保持原目录结构，支持增量
-- **播放列表**：按目录（老师）分组自然排序、实时搜索、每首显示总时长与已听进度
+- **播放列表**：按目录分组自然排序、实时搜索、每首显示总时长与已听进度
 - **进度记忆**：记住每首的上次播放位置 + 上次播放的曲目，刷新/重开自动恢复
 - **倍速播放**：0.1 ~ 4.0（预设 0.5/0.75/1/1.25/1.5/1.75/2/2.5/3/4 + ±0.1 微调）
 - **播放模式**：顺序 / 列表循环 / 单曲循环 / 随机
@@ -41,22 +40,17 @@ uv pip install -r requirements.txt
 
 > 仅运行播放器本体只需要 `python-dotenv`；`playwright` / `pillow` 仅为测试与截图脚本所需。
 
-### 3. 配置路径
+### 3. 配置
 
 ```bash
 cp .env.example .env    # Windows: copy .env.example .env
 ```
 
-编辑 `.env`，设置 `COURSE_SRC_DIR`（视频课程源目录）等。所有路径/端口统一在 `.env` 配置，由 `config.py` 解析，代码中零硬编码路径。
+编辑 `.env`，设置 `AUDIO_DIR`（音频文件目录）。所有路径/端口统一在 `.env` 配置，由 `config.py` 解析，代码中零硬编码路径。
 
-### 4. 提取音频（可选，仓库已带 audio/ 的话跳过）
+### 4. 放入音频
 
-```bash
-python extract_audio.py           # 增量提取（已存在跳过）
-python extract_audio.py --force   # 强制全部重提
-```
-
-需要系统安装 [ffmpeg](https://ffmpeg.org/)（或 `.env` 里指定 `FFMPEG_PATH` / `FFPROBE_PATH`）。
+把音频文件（`.m4a` / `.mp3` / `.opus` / `.ogg` / `.flac` 等）按任意目录结构放入 `AUDIO_DIR`（默认 `./audio`），子目录会自动成为播放列表的分组。
 
 ### 5. 启动
 
@@ -72,28 +66,34 @@ python server.py
 ```
 kcourse-audio/
 ├── config.py           # 统一配置：解析 .env → settings（全项目唯一路径来源）
-├── server.py           # 后端：静态文件 + /api/list + /api/status + 音频 Range 流式
-├── extract_audio.py    # 音频提取（ffprobe 探测编码，AAC 无损 copy）
+├── server.py           # 后端：静态文件 + /api/list + 音频 Range 流式
 ├── index.html          # 前端（单文件，无构建、无外部依赖）
 ├── requirements.txt    # pip 依赖（带版本号）
 ├── .env.example        # 环境变量模板（复制为 .env 使用）
 ├── 启动.bat            # Windows 一键启动
-├── test_e2e.py         # Playwright E2E 回归（28 项）
-├── test_ui.py          # DOM 级 UI 质检（16 项）
+├── test_e2e.py         # Playwright E2E 回归
+├── test_ui.py          # DOM 级 UI 质检
 ├── take_shots.py       # 截图工具（输出到 .cache/）
-├── .cache/             # 本地测试产物（git 忽略）：截图、durations.json、extract_status.json
-└── audio/              # 提取的音频（git 忽略，体积大）
+├── .cache/             # 本地测试产物 + 一次性临时脚本（git 忽略）
+└── audio/              # 音频资产（git 忽略，体积大）
 ```
 
 ## 配置项（.env）
 
 | 变量 | 说明 | 默认 |
 |---|---|---|
-| `COURSE_SRC_DIR` | 视频课程源目录（提取用） | `./course_src` |
 | `AUDIO_DIR` | 音频目录 | `./audio` |
 | `KAUDIO_PORT` | 服务器端口 | `8792` |
-| `FFMPEG_PATH` / `FFPROBE_PATH` | ffmpeg/ffprobe 路径（留空用 PATH） | PATH 查找 |
+| `FFPROBE_PATH` | ffprobe 路径（探测总时长用，留空用 PATH） | PATH 查找 |
 | `CACHE_DIR` | 本地测试产物目录 | `./.cache` |
+
+## 音频从哪来？
+
+本项目只负责**播放**。音频文件如何得到（从视频提取、压缩转码等）属于一次性临时操作：
+
+- 临时脚本统一放在 `.cache/tmp_scripts/`（git 忽略），路径用脚本内变量赋值，不进配置、不进版本库
+- 历史用过：ffmpeg 从课程视频无损提取 AAC 音轨（`-c:a copy` → m4a）、Opus 24k/48k 单声道极限压缩（3.54GB → 0.64GB，省 82%）
+- 重新生成的音频放入 `AUDIO_DIR` 即可被播放器识别
 
 ## 测试
 
@@ -110,5 +110,4 @@ python take_shots.py # 生成截图到 .cache/
 | 端点 | 说明 |
 |---|---|
 | `GET /api/list` | 播放列表（含每首总时长 `dur` 秒，缓存于 `.cache/durations.json`） |
-| `GET /api/status` | 音频提取进度状态 |
 | `GET /audio/<path>` | 音频流（支持 Range，拖动进度条秒响应） |

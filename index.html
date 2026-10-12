@@ -506,13 +506,12 @@ async function boot(){
     return;
   }
   if(state.items.length === 0){
-    $('#list').innerHTML = `<div class="empty"><div class="spin"></div><div>音频提取中…<br><span style="font-size:11px">完成后自动刷新</span></div></div>`;
+    $('#list').innerHTML = `<div class="empty"><div>音频目录为空<br><span style="font-size:11px">请检查 .env 的 AUDIO_DIR 配置</span></div></div>`;
     setTimeout(boot, 5000);
     return;
   }
   renderList();
   restoreLast();
-  startStatusWatch();
 }
 
 /* ================= 列表渲染 ================= */
@@ -830,16 +829,6 @@ document.addEventListener('keydown', e=>{
   else if(e.code === 'ArrowUp'){ applyRate(state.rate + 0.1); toast('倍速 '+state.rate.toFixed(1)+'×'); }
   else if(e.code === 'ArrowDown'){ applyRate(state.rate - 0.1); toast('倍速 '+state.rate.toFixed(1)+'×'); }
 });
-
-/* ================= 提取进度监听 ================= */
-let lastCount = -1;
-function startStatusWatch(){
-  fetch('/api/status').then(r=>r.json()).then(d=>{
-    if(d.running && d.total && d.done < d.total){
-      setTimeout(()=>{ location.reload(); }, 8000);
-    }
-  }).catch(()=>{});
-}
 
 /* ================= init ================= */
 $('#btnMode').textContent = (MODES.find(m=>m.k===state.mode)||MODES[0]).label;

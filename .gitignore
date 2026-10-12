@@ -8,10 +8,10 @@ __pycache__/
 .venv/
 venv/
 
-# 本地测试产物（截图、时长缓存、提取状态等）
+# 本地测试产物 + 一次性临时脚本（提取/转码等）
 .cache/
 
-# 音频资产（体积大，不入库；用 extract_audio.py 重新生成）
+# 音频资产（体积大，不入库）
 audio/
 audio_opus/
 course_src/
