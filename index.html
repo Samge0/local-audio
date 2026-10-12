@@ -650,6 +650,13 @@ au.addEventListener('ended', ()=>{
   }
 });
 au.addEventListener('error', ()=>{ if(state.curId) toast('音频加载失败'); });
+/* 兜底：浏览器在换源/元数据加载后可能把 playbackRate 重置回 1，
+   只要与记忆值不符立即拉回（防止 UI 显示与实际速率脱节） */
+au.addEventListener('ratechange', ()=>{
+  if(Math.abs(au.playbackRate - state.rate) > 0.001){
+    au.playbackRate = state.rate;
+  }
+});
 
 /* ================= 进度条 ================= */
 const seek = $('#seek');
@@ -788,6 +795,7 @@ function restoreLast(){
     const it = state.items[findIdx(cid)];
     state.curId = cid;
     au.src = it.url;
+    au.playbackRate = state.rate;   // 恢复记忆倍速（否则浏览器默认 1.0，UI 显示与实际不符）
     const p = loadPos(cid);
     $('#tDur').textContent = '';
     updateNow(it);
