@@ -4,6 +4,7 @@
 流程：转码 -> 校验（数量+时长一致）-> 由调用方手动/自动 swap 目录。
 转换是 CPU 密集，ThreadPool 并行加速。
 """
+import os
 import subprocess
 import sys
 import time
@@ -13,7 +14,7 @@ from pathlib import Path
 from config import PROJECT_ROOT, settings
 
 OUT_DIR = PROJECT_ROOT / "audio_opus"
-BITRATE = "48k"
+BITRATE = os.environ.get("OPUS_BITRATE", "24k")
 
 
 def transcode_one(src: Path, dst: Path) -> tuple[bool, str]:
@@ -42,9 +43,18 @@ def dur_of(p: Path) -> float | None:
 def main():
     if not settings.FFMPEG:
         raise SystemExit("ffmpeg 不可用（.env FFMPEG_PATH）")
-    srcs = sorted(settings.AUDIO_DIR.rglob("*.m4a"))
-    print(f"待转码 {len(srcs)} 个 m4a -> Opus {BITRATE} 单声道, 输出 {OUT_DIR}")
-    jobs = [(s, OUT_DIR / s.relative_to(settings.AUDIO_DIR).with_suffix(".opus"))
+    # 转码源 = AUDIO_DIR 里的 m4a；但 AUDIO_DIR 可能已指向 opus 目录（在线服务用），
+    # 此时回落到项目根的 audio/（原始 m4a 提取目录）。
+    src_dir = settings.AUDIO_DIR
+    if src_dir.resolve() == OUT_DIR.resolve() or not list(src_dir.rglob("*.m4a")):
+        fallback = PROJECT_ROOT / "audio"
+        if fallback.exists() and list(fallback.rglob("*.m4a")):
+            src_dir = fallback
+    srcs = sorted(src_dir.rglob("*.m4a"))
+    if not srcs:
+        raise SystemExit(f"找不到 m4a 源（查过 {src_dir} 与 {PROJECT_ROOT/'audio'}）")
+    print(f"待转码 {len(srcs)} 个 m4a ({src_dir}) -> Opus {BITRATE} 单声道, 输出 {OUT_DIR}")
+    jobs = [(s, OUT_DIR / s.relative_to(src_dir).with_suffix(".opus"))
             for s in srcs]
     t0 = time.time()
     done = fail = 0
