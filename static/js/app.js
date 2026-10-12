@@ -1,0 +1,417 @@
+'use strict';
+/* ================= 状态 ================= */
+const LS = {
+  cur: 'ka.cur', pos: 'ka.pos', rate: 'ka.rate',
+  mode: 'ka.mode', sleep: 'ka.sleep', vol: 'ka.vol'
+};
+const state = {
+  items: [],            // 服务端列表
+  curId: null,          // 当前曲目 id
+  playing: false,
+  seeking: false,       // 拖动进度条中
+  mode: localStorage.getItem(LS.mode) || 'seq',   // seq|one|loop|shuffle
+  sleepAt: 0,           // 定时播放结束的时间戳（ms），0=off
+  sleepLeft: 0,         // 定时剩余秒（用于显示与恢复）
+  sleepTick: null,
+};
+const $ = s => document.querySelector(s);
+const au = $('#au');
+
+/* ================= 工具 ================= */
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function fmt(s){
+  if(!isFinite(s)||s<0) s=0;
+  s = Math.floor(s);
+  const h=Math.floor(s/3600), m=Math.floor(s%3600/60), sec=s%60;
+  return h? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+}
+function fmtSize(n){
+  if(n>1e9) return (n/1e9).toFixed(2)+' GB';
+  if(n>1e6) return (n/1e6).toFixed(1)+' MB';
+  return (n/1e3).toFixed(0)+' KB';
+}
+function setV(el, v){ el.style.setProperty('--v', (v*100).toFixed(2)+'%'); }
+
+/* ================= 进度记忆 ================= */
+const POS_KEY = id => LS.pos + '.' + id;
+function savePos(){
+  if(!state.curId || !isFinite(au.currentTime) || au.currentTime < 1) return;
+  localStorage.setItem(POS_KEY(state.curId), String(Math.floor(au.currentTime)));
+}
+function loadPos(id){
+  const v = parseInt(localStorage.getItem(POS_KEY(id)) || '0', 10);
+  return isFinite(v) ? v : 0;
+}
+function clearPos(id){
+  if(id) localStorage.removeItem(POS_KEY(id));
+}
+setInterval(savePos, 3000);
+window.addEventListener('beforeunload', savePos);
+/* 正在播放的行：已听时长实时刷新（不整列重绘） */
+setInterval(()=>{
+  if(!state.curId || !state.playing || !isFinite(au.currentTime)) return;
+  const el = document.getElementById('tr-'+cssId(state.curId));
+  if(!el) return;
+  let box = el.querySelector('.t-dur');
+  if(!box) return;
+  let pos = box.querySelector('.t-pos');
+  if(!pos){
+    box.insertAdjacentHTML('afterbegin',
+      `<span class="t-pos"></span><span class="t-sep">/</span>`);
+    pos = box.querySelector('.t-pos');
+  }
+  pos.textContent = fmt(au.currentTime);
+}, 1000);
+
+/* ================= 数据加载 ================= */
+async function boot(){
+  try{
+    const r = await fetch('/api/list');
+    const d = await r.json();
+    state.items = d.items || [];
+  }catch(e){
+    $('#list').innerHTML = `<div class="empty"><div class="spin"></div><div>加载失败，请刷新重试（提取任务可能仍在进行）</div></div>`;
+    return;
+  }
+  if(state.items.length === 0){
+    $('#list').innerHTML = `<div class="empty"><div>音频目录为空<br><span style="font-size:11px">请检查 .env 的 AUDIO_DIR 配置</span></div></div>`;
+    setTimeout(boot, 5000);
+    return;
+  }
+  renderList();
+  restoreLast();
+}
+
+/* ================= 列表渲染 ================= */
+function visibleItems(){
+  const q = $('#q').value.trim().toLowerCase();
+  if(!q) return state.items;
+  return state.items.filter(it =>
+    it.name.toLowerCase().includes(q) || (it.group||'').toLowerCase().includes(q));
+}
+function renderList(){
+  const list = $('#list');
+  const vis = visibleItems();
+  if(vis.length === 0){
+    list.innerHTML = `<div class="empty" style="position:static;padding:40px 20px"><div>无匹配课程</div></div>`;
+    return;
+  }
+  let html = '', lastGroup = null, idx = 0;
+  for(const it of vis){
+    idx++;
+    if(it.group !== lastGroup){
+      html += `<div class="group-title">${esc(it.group || '未分组')}</div>`;
+      lastGroup = it.group;
+    }
+    const pos = loadPos(it.id);
+    const durTxt = it.dur ? fmt(it.dur) : '·';
+    const posTxt = pos > 2 ? fmt(pos) : '';
+    html += `<div class="track" data-id="${it.id}" id="tr-${cssId(it.id)}">
+      <div class="idx">${idx}</div>
+      <div class="meta">
+        <div class="t-name">${esc(it.name)}</div>
+        <div class="t-sub">${esc(it.group||'')} · ${fmtSize(it.size)} · ${it.ext.toUpperCase()}</div>
+      </div>
+      <div class="t-dur">${posTxt ? `<span class="t-pos">${posTxt}</span><span class="t-sep">/</span>` : ''}<span class="t-total">${durTxt}</span></div>
+    </div>`;
+  }
+  list.innerHTML = html;
+  list.querySelectorAll('.track').forEach(el => {
+    el.addEventListener('click', () => play(el.dataset.id));
+  });
+  markPlaying();
+}
+function cssId(id){ return 'i' + btoa(unescape(encodeURIComponent(id))).replace(/[^a-zA-Z0-9]/g,''); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function markPlaying(){
+  document.querySelectorAll('.track.playing').forEach(el=>el.classList.remove('playing'));
+  document.querySelectorAll('.idx.eq').forEach(el=>{el.classList.remove('eq');});
+  if(!state.curId) return;
+  const el = document.getElementById('tr-'+cssId(state.curId));
+  if(el){
+    el.classList.add('playing');
+    const idx = el.querySelector('.idx');
+    if(idx && state.playing){
+      idx.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      idx.classList.add('eq');
+    }
+  }
+}
+
+/* ================= 播放控制 ================= */
+function findIdx(id){ return state.items.findIndex(it => it.id === id); }
+function nextId(dir){
+  if(state.items.length === 0) return null;
+  if(state.mode === 'shuffle'){
+    if(state.items.length === 1) return state.curId;
+    let n;
+    do { n = state.items[Math.floor(Math.random()*state.items.length)].id; } while(n === state.curId);
+    return n;
+  }
+  const i = findIdx(state.curId);
+  if(i === -1) return state.items[0].id;
+  const j = i + dir;
+  if(j >= state.items.length) return null; // 结束
+  if(j < 0) return state.items[0].id;
+  return state.items[j].id;
+}
+function play(id, opts={}){
+  const it = state.items[findIdx(id)];
+  if(!it){ toast('曲目不存在'); return; }
+  state.curId = id;
+  localStorage.setItem(LS.cur, id);
+  au.src = it.url;
+  const p = loadPos(id);
+  if(p > 2 && !opts.fresh) {
+    au.currentTime = p;
+    toast(`已从上次进度 ${fmt(p)} 继续`);
+  }
+  au.playbackRate = state.rate;
+  au.play().catch(()=>{});
+  updateNow(it);
+  markPlaying();
+}
+function updateNow(it){
+  $('#nowTitle').textContent = it.name;
+  $('#nowSub').innerHTML = `${esc(it.group||'')} · ${fmtSize(it.size)} · <span id="nowRateTxt">${state.rate.toFixed(1)}×</span>`;
+  $('#winTitle').textContent = it.name + ' — K 哥课程';
+}
+function togglePlay(){
+  if(!state.curId){
+    const vis = visibleItems();
+    if(vis.length) play(vis[0].id); else toast('播放列表为空');
+    return;
+  }
+  if(au.paused) au.play().catch(()=>{}); else au.pause();
+}
+function step(dir){
+  const nid = nextId(dir);
+  if(!nid){ toast(dir>0 ? '已经是最后一个了' : '已经是第一个了'); return; }
+  play(nid);
+}
+function seekBy(sec){
+  if(!isFinite(au.duration)) return;
+  au.currentTime = Math.max(0, Math.min(au.duration - 0.5, au.currentTime + sec));
+}
+
+/* ================= audio 事件 ================= */
+au.addEventListener('play', ()=>{ state.playing=true; document.body.classList.add('playing'); $('#icPlay').style.display='none'; $('#icPause').style.display=''; markPlaying(); });
+au.addEventListener('pause', ()=>{ state.playing=false; document.body.classList.remove('playing'); $('#icPlay').style.display=''; $('#icPause').style.display='none'; markPlaying(); savePos(); });
+au.addEventListener('loadedmetadata', ()=>{ $('#tDur').textContent = fmt(au.duration); });
+au.addEventListener('durationchange', ()=>{ $('#tDur').textContent = fmt(au.duration); });
+au.addEventListener('timeupdate', ()=>{
+  if(!state.seeking && isFinite(au.duration) && au.duration>0){
+    const v = au.currentTime/au.duration;
+    $('#seek').value = Math.round(v*1000);
+    setV($('#seek'), v);
+  }
+  $('#tCur').textContent = fmt(au.currentTime);
+});
+au.addEventListener('ended', ()=>{
+  savePos();
+  clearPos(state.curId);
+  if(state.mode === 'one'){ au.currentTime=0; au.play().catch(()=>{}); }
+  else{
+    const nid = nextId(1);
+    if(nid) play(nid);
+    else { state.playing=false; document.body.classList.remove('playing'); }
+  }
+});
+au.addEventListener('error', ()=>{ if(state.curId) toast('音频加载失败'); });
+/* 兜底：浏览器在换源/元数据加载后可能把 playbackRate 重置回 1，
+   只要与记忆值不符立即拉回（防止 UI 显示与实际速率脱节） */
+au.addEventListener('ratechange', ()=>{
+  if(Math.abs(au.playbackRate - state.rate) > 0.001){
+    au.playbackRate = state.rate;
+  }
+});
+
+/* ================= 进度条 ================= */
+const seek = $('#seek');
+seek.addEventListener('input', ()=>{
+  state.seeking = true;
+  const v = seek.value/1000;
+  setV(seek, v);
+  if(isFinite(au.duration)) $('#tCur').textContent = fmt(v*au.duration);
+});
+seek.addEventListener('change', ()=>{
+  if(isFinite(au.duration)){
+    au.currentTime = (seek.value/1000)*au.duration;
+    savePos();
+  }
+  state.seeking = false;
+});
+
+/* ================= 倍速 ================= */
+state.rate = clampRate(parseFloat(localStorage.getItem(LS.rate)) || 1);
+function clampRate(r){
+  if(!isFinite(r)) return 1;
+  return Math.max(0.1, Math.min(4, r));  // 只夹边界，保留 0.75/1.25 等精确预设
+}
+function applyRate(r, round){
+  state.rate = clampRate(r);
+  if(round) state.rate = clampRate(Math.round(state.rate*10)/10);  // 仅微调时取 1 位小数
+  localStorage.setItem(LS.rate, String(state.rate));
+  au.playbackRate = state.rate;
+  $('#btnRate').textContent = state.rate.toFixed(1)+'×';
+  const rt = document.getElementById('nowRateTxt');
+  if(rt) rt.textContent = state.rate.toFixed(1)+'×';
+  if(popEl && popEl.parentNode) buildRatePop();
+}
+const PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4];
+let popEl = null;
+function closePop(){
+  if(popEl){ popEl.remove(); popEl=null; }
+  document.removeEventListener('pointerdown', popOutside);
+}
+function popOutside(ev){
+  if(!popEl) return;
+  if(popEl.contains(ev.target)) return;
+  if($('#btnRate').contains(ev.target)) return; // 按钮自身走 toggle
+  closePop();
+}
+function buildRatePop(){
+  popEl.innerHTML = `
+    <div class="p-title">播放速度 <b id="popCur">${state.rate.toFixed(1)}×</b></div>
+    <div class="preset-grid">
+      ${PRESETS.map(p=>`<button class="pbtn ${p===state.rate?'on':''}" data-p="${p}">${p}</button>`).join('')}
+    </div>
+    <div class="fine">
+      <button id="rMinus">−</button>
+      <div class="fval" id="fval">${state.rate.toFixed(1)}×</div>
+      <button id="rPlus">＋</button>
+    </div>
+    <div class="hint">0.1 ~ 4.0，步进 0.1</div>`;
+  popEl.querySelectorAll('.pbtn').forEach(b=>b.addEventListener('click',()=>{applyRate(parseFloat(b.dataset.p));}));
+  popEl.querySelector('#rMinus').addEventListener('click',()=>applyRate(state.rate-0.1,true));
+  popEl.querySelector('#rPlus').addEventListener('click',()=>applyRate(state.rate+0.1,true));
+}
+function toggleRatePop(){
+  if(popEl){ closePop(); return; }
+  popEl = document.createElement('div');
+  popEl.className = 'pop';
+  document.body.appendChild(popEl);
+  buildRatePop();
+  const r = $('#btnRate').getBoundingClientRect();
+  const pw = 250, ph = 190;
+  let left = Math.min(Math.max(8, r.left + r.width/2 - pw/2), innerWidth - pw - 8);
+  let top = r.top - ph - 8;
+  if(top < 60) top = r.bottom + 8;
+  popEl.style.left = left+'px'; popEl.style.top = top+'px';
+  document.addEventListener('pointerdown', popOutside);
+}
+$('#btnRate').addEventListener('click', toggleRatePop);
+
+/* ================= 播放模式 ================= */
+const MODES = [
+  {k:'seq', label:'顺序', tip:'顺序播放'},
+  {k:'loop', label:'循环', tip:'列表循环'},
+  {k:'one', label:'单曲', tip:'单曲循环'},
+  {k:'shuffle', label:'随机', tip:'随机播放'},
+];
+function cycleMode(){
+  const i = MODES.findIndex(m=>m.k===state.mode);
+  const m = MODES[(i+1)%MODES.length];
+  state.mode = m.k;
+  localStorage.setItem(LS.mode, m.k);
+  $('#btnMode').textContent = m.label;
+  toast(m.tip);
+}
+$('#btnMode').addEventListener('click', cycleMode);
+
+/* ================= 定时关闭 ================= */
+const SLEEPS = [5, 10, 15, 30, 60];
+function cycleSleep(){
+  if(state.sleepTick){
+    clearInterval(state.sleepTick); state.sleepTick=null;
+    state.sleepAt = 0;
+    $('#btnSleep').classList.remove('act');
+    $('#btnSleep').textContent = '定时';
+    toast('已取消定时');
+    return;
+  }
+  const mins = SLEEPS[state._si = ((state._si||0)+1) % (SLEEPS.length+1)];
+  if(mins === undefined){
+    $('#btnSleep').classList.remove('act');
+    $('#btnSleep').textContent = '定时';
+    return;
+  }
+  state.sleepAt = Date.now() + mins*60*1000;
+  $('#btnSleep').classList.add('act');
+  $('#btnSleep').textContent = mins+'分';
+  toast(`${mins} 分钟后停止播放`);
+  if(state.sleepTick) clearInterval(state.sleepTick);
+  state.sleepTick = setInterval(()=>{
+    const left = state.sleepAt - Date.now();
+    if(left <= 0){
+      au.pause(); savePos();
+      clearInterval(state.sleepTick); state.sleepTick=null; state.sleepAt=0;
+      $('#btnSleep').classList.remove('act');
+      $('#btnSleep').textContent = '定时';
+      toast('定时结束，已停止播放');
+    } else {
+      $('#btnSleep').textContent = Math.ceil(left/60000)+'分';
+    }
+  }, 5000);
+}
+$('#btnSleep').addEventListener('click', cycleSleep);
+
+/* ================= 恢复上次 ================= */
+function restoreLast(){
+  const cid = localStorage.getItem(LS.cur);
+  if(cid && findIdx(cid) !== -1){
+    const it = state.items[findIdx(cid)];
+    state.curId = cid;
+    au.src = it.url;
+    au.playbackRate = state.rate;   // 恢复记忆倍速（否则浏览器默认 1.0，UI 显示与实际不符）
+    const p = loadPos(cid);
+    $('#tDur').textContent = '';
+    updateNow(it);
+    markPlaying();
+    if(p > 2){
+      $('#tCur').textContent = fmt(p);
+      au.addEventListener('loadedmetadata', function once(){
+        au.removeEventListener('loadedmetadata', once);
+        au.currentTime = Math.min(p, Math.max(0, au.duration - 1));
+        $('#seek').value = Math.round(au.currentTime/Math.max(1,au.duration)*1000);
+        setV($('#seek'), au.currentTime/Math.max(1,au.duration));
+      }, {once:true});
+    }
+  }
+}
+
+/* ================= 搜索 ================= */
+let qT;
+$('#q').addEventListener('input', e=>{
+  $('#qclr').hidden = !e.target.value;
+  clearTimeout(qT);
+  qT = setTimeout(renderList, 160);
+});
+$('#qclr').addEventListener('click', ()=>{
+  $('#q').value=''; $('#qclr').hidden = true; renderList(); $('#q').focus();
+});
+
+/* ================= 按钮 ================= */
+$('#btnPlay').addEventListener('click', togglePlay);
+$('#btnPrev').addEventListener('click', ()=>step(-1));
+$('#btnNext').addEventListener('click', ()=>step(1));
+$('#btnBack15').addEventListener('click', ()=>seekBy(-15));
+$('#btnFwd15').addEventListener('click', ()=>seekBy(15));
+document.addEventListener('keydown', e=>{
+  if(e.target.tagName === 'INPUT') return;
+  if(e.code === 'Space'){ e.preventDefault(); togglePlay(); }
+  else if(e.code === 'ArrowLeft') seekBy(-15);
+  else if(e.code === 'ArrowRight') seekBy(15);
+  else if(e.code === 'ArrowUp'){ applyRate(state.rate + 0.1); toast('倍速 '+state.rate.toFixed(1)+'×'); }
+  else if(e.code === 'ArrowDown'){ applyRate(state.rate - 0.1); toast('倍速 '+state.rate.toFixed(1)+'×'); }
+});
+
+/* ================= init ================= */
+$('#btnMode').textContent = (MODES.find(m=>m.k===state.mode)||MODES[0]).label;
+$('#btnRate').textContent = state.rate.toFixed(1)+'×';
+boot();
