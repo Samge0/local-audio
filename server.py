@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""K课程音频播放器 - 后端。
+"""通用音频播放器 - 后端。
 
 扫描 AUDIO_DIR（保持目录结构）提供播放列表；
 静态文件 + /api/* 路由；音频走独立流式 handler，支持 Range（拖动进度条必需）。
@@ -19,6 +19,7 @@ from config import PROJECT_ROOT, settings
 
 AUDIO_URL_PREFIX = "/audio/"
 AUDIO_EXT = {".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac", ".opus"}
+SUB_EXT = {".vtt"}  # 浏览器字幕（同目录同名 .srt/.ass 等已由临时脚本统一转成 vtt）
 CTYPES = {".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".aac": "audio/aac",
           ".ogg": "audio/ogg", ".wav": "audio/wav", ".flac": "audio/flac",
           ".opus": "audio/opus"}
@@ -59,7 +60,9 @@ def _save_dur_cache():
 
 
 def scan_audio() -> list[dict]:
-    """返回 [{id, name, group, size, ext, url}]，按目录分组自然排序。"""
+    """返回 [{id, name, group, size, ext, url, sub}]，按目录分组自然排序。
+    sub = 同名字幕的 vtt URL（含 ffmpeg 转换产物），无字幕为 null。"""
+    SUB_EXTS = (".srt", ".ass", ".ssa", ".sub", ".vtt")
     items = []
     audio_dir = settings.AUDIO_DIR
     if audio_dir.exists():
@@ -70,6 +73,14 @@ def scan_audio() -> list[dict]:
                 group = " / ".join(parts[:-1]) if len(parts) > 1 else ""
                 stem = parts[-1][: -len(p.suffix)]
                 rid = urllib.parse.quote(str(rel).replace("\\", "/"), safe="")
+                # 同名字幕探测：多点多扩展名文件名（"1.第1章-x.opus"）不能用 with_suffix
+                sub = None
+                name_no_ext = p.name[: -len(p.suffix)]
+                for ext in SUB_EXTS:
+                    if (p.parent / (name_no_ext + ext)).exists():
+                        vtt_rel = str(rel.parent / (stem + ".vtt")).replace("\\", "/") if rel.parent else stem + ".vtt"
+                        sub = AUDIO_URL_PREFIX + urllib.parse.quote(vtt_rel, safe="")
+                        break
                 items.append({
                     "id": rid,
                     "name": stem,
@@ -77,6 +88,7 @@ def scan_audio() -> list[dict]:
                     "size": p.stat().st_size,
                     "ext": p.suffix.lower().lstrip("."),
                     "url": AUDIO_URL_PREFIX + rid,
+                    "sub": sub,
                 })
 
     def natkey(it):
@@ -148,13 +160,15 @@ class Handler(SimpleHTTPRequestHandler):
             p.relative_to(base)
         except ValueError:
             return None  # 目录穿越
-        if p.is_file() and p.suffix.lower() in AUDIO_EXT:
+        if p.is_file() and p.suffix.lower() in AUDIO_EXT | SUB_EXT:
             return p
         return None
 
     def _stream_audio(self, p: Path):
         size = p.stat().st_size
-        ctype = CTYPES.get(p.suffix.lower(), "application/octet-stream")
+        ctype = CTYPES.get(p.suffix.lower(),
+                           "text/vtt; charset=utf-8" if p.suffix.lower() == ".vtt"
+                           else "application/octet-stream")
         rng = self.headers.get("Range")
         start, end = 0, size - 1
         partial = False
@@ -203,7 +217,7 @@ class Handler(SimpleHTTPRequestHandler):
             if p is None:
                 return self._json({"ok": False, "error": "not found"}, 404)
             return self._stream_audio(p)
-        if path in ("/", "/index.html"):
+        if path in ("/", "/index.html", "/static/"):
             # HTML 不缓存：样式改动刷新即生效
             if settings.INDEX_HTML.exists():
                 body = settings.INDEX_HTML.read_bytes()
@@ -241,7 +255,7 @@ def main():
     _load_dur_cache()
     items = scan_audio_with_dur()
     total_h = sum(i["dur"] or 0 for i in items) / 3600
-    print(f"K课程音频播放器: http://127.0.0.1:{settings.PORT}  (audio: {settings.AUDIO_DIR})")
+    print(f"音频播放器: http://127.0.0.1:{settings.PORT}  (audio: {settings.AUDIO_DIR})")
     print(f"已发现 {len(items)} 个音频文件, 总时长 {total_h:.1f} 小时")
     httpd = ThreadingHTTPServer(("0.0.0.0", settings.PORT), Handler)
     httpd.serve_forever()

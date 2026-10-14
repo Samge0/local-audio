@@ -6,7 +6,7 @@
 <title>音频播放器</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236a8dff'/%3E%3Cstop offset='1' stop-color='%23a26bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath d='M32 14v22m0 0c0-5-4-9-9-9m9 9c0-5 4-9 9-9' stroke='white' stroke-width='4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M20 42h24' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="static/css/style.css?v=1.0.0">
+<link rel="stylesheet" href="static/css/style.css?v=1.0.0.0">
 </head>
 <body>
 <div class="win">
@@ -16,7 +16,7 @@
       <div class="light min" data-g="–"></div>
       <div class="light max" data-g="⤢"></div>
     </div>
-    <div class="win-title" id="winTitle">K 哥课程 · 音频中心</div>
+    <div class="win-title" id="winTitle">音频播放器</div>
   </div>
 
   <div class="main">
@@ -25,7 +25,7 @@
       <div class="search-wrap">
         <div class="search">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
-          <input id="q" type="search" placeholder="搜索课程…" autocomplete="off">
+          <input id="q" type="search" placeholder="搜索音频…" autocomplete="off">
           <button class="clr" id="qclr" hidden>✕</button>
         </div>
       </div>
@@ -45,8 +45,9 @@
           </div>
           <div>
             <div class="now-title" id="nowTitle">未在播放</div>
-            <div class="now-sub" id="nowSub">从左侧列表选择一个课程开始</div>
+            <div class="now-sub" id="nowSub">从左侧列表选择一个音频开始</div>
           </div>
+          <div class="sub-line" id="subLine" hidden></div>
         </div>
       </div>
 
@@ -77,6 +78,7 @@
         <div class="ctrls2">
           <button class="chip" id="btnMode" aria-label="播放模式">顺序</button>
           <button class="chip act" id="btnRate" aria-label="倍速">1.0×</button>
+          <button class="chip" id="btnSub" aria-label="字幕开关">字幕</button>
           <button class="chip" id="btnSleep" aria-label="定时关闭">定时</button>
         </div>
       </div>
@@ -84,10 +86,12 @@
   </div>
 </div>
 
-<audio id="au" preload="metadata"></audio>
+<audio id="au" preload="metadata">
+  <track id="subTrack" kind="subtitles" default>
+</audio>
 <div id="toast"></div>
 
-<script src="static/js/app.js?v=1.0.0"></script>
+<script src="static/js/app.js?v=1.0.0.2"></script>
 
 </body>
 </html>

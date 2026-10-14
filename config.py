@@ -53,7 +53,7 @@ class Settings:
 
     def __post_init__(self):
         object.__setattr__(self, "DURATIONS_CACHE", self.CACHE_DIR / "durations.json")
-        object.__setattr__(self, "INDEX_HTML", PROJECT_ROOT / "index.html")
+        object.__setattr__(self, "INDEX_HTML", PROJECT_ROOT / "static" / "index.html")
 
 
 settings = Settings.load()

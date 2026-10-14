@@ -1,0 +1,27 @@
+services:
+  audio-player:
+    build: .
+    image: audio-player:${TAG:-latest}
+    container_name: audio-player
+    restart: unless-stopped
+    ports:
+      - "${KAUDIO_PORT:-8792}:8792"
+    volumes:
+      # 音频目录：把宿主机音频目录挂进来即可（Windows: F:/music:/app/audio）
+      - ${AUDIO_DIR:-./audio}:/app/audio
+      - ${CACHE_DIR:-./.cache/docker}:/app/.cache
+      # 前端挂卷：改 HTML/CSS/JS 无需 rebuild（镜像内同名文件被覆盖）
+      - ./static:/app/static
+    environment:
+      # 容器内固定值（挂卷路径），覆盖 .env 中的宿主机路径
+      AUDIO_DIR: /app/audio
+      CACHE_DIR: /app/.cache
+      KAUDIO_PORT: 8792
+      # ffprobe 在镜像内
+      FFPROBE_PATH: /usr/bin/ffprobe
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8792/api/list',timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5s
+      retries: 3

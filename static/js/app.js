@@ -2,7 +2,7 @@
 /* ================= 状态 ================= */
 const LS = {
   cur: 'ka.cur', pos: 'ka.pos', rate: 'ka.rate',
-  mode: 'ka.mode', sleep: 'ka.sleep', vol: 'ka.vol'
+  mode: 'ka.mode', sleep: 'ka.sleep', vol: 'ka.vol', sub: 'ka.sub'
 };
 const state = {
   items: [],            // 服务端列表
@@ -13,6 +13,7 @@ const state = {
   sleepAt: 0,           // 定时播放结束的时间戳（ms），0=off
   sleepLeft: 0,         // 定时剩余秒（用于显示与恢复）
   sleepTick: null,
+  subOn: localStorage.getItem(LS.sub) !== '0',  // 字幕默认开
 };
 const $ = s => document.querySelector(s);
 const au = $('#au');
@@ -98,7 +99,7 @@ function renderList(){
   const list = $('#list');
   const vis = visibleItems();
   if(vis.length === 0){
-    list.innerHTML = `<div class="empty" style="position:static;padding:40px 20px"><div>无匹配课程</div></div>`;
+    list.innerHTML = `<div class="empty" style="position:static;padding:40px 20px"><div>无匹配音频</div></div>`;
     return;
   }
   let html = '', lastGroup = null, idx = 0;
@@ -171,15 +172,55 @@ function play(id, opts={}){
     au.currentTime = p;
     toast(`已从上次进度 ${fmt(p)} 继续`);
   }
+  attachSub(it);
   au.playbackRate = state.rate;
   au.play().catch(()=>{});
   updateNow(it);
   markPlaying();
 }
+/* 挂/卸同名字幕 track；subPref=false 时仅移除 active 让浏览器隐藏 */
+function attachSub(it){
+  const tr = document.getElementById('subTrack');
+  if(!it || !it.sub){
+    tr.src=''; tr.track.mode='disabled';
+    hideSubLine(); updateSubBtn(); return;
+  }
+  tr.src = it.sub;
+  tr.track.mode = state.subOn ? 'showing' : 'disabled';
+  if(state.subOn) renderSubLine('');   /* 开字幕即占位，不等首个 cue */
+  else hideSubLine();
+  updateSubBtn();
+}
+/* <audio> 不会渲染 cue 画面：监听 cuechange 自绘台词行。
+   字幕开 = 固定宽高占位（cue 空档只清文本，防抖动）；字幕关/无字幕 = 收回占位 */
+function hideSubLine(){
+  const el = document.getElementById('subLine');
+  el.hidden = true; el.textContent = '';
+}
+function renderSubLine(text){
+  const el = document.getElementById('subLine');
+  el.hidden = false;
+  el.textContent = text || '';
+  el.scrollTop = 0;
+}
+function bindSubEvents(){
+  const tr = document.getElementById('subTrack');
+  tr.addEventListener('cuechange', ()=>{
+    if(tr.track.mode !== 'showing'){ hideSubLine(); return; }
+    const active = tr.track.activeCues;
+    renderSubLine(active && active.length ? active[active.length-1].text : '');
+  });
+}
+function updateSubBtn(){
+  const b = document.getElementById('btnSub');
+  const hasSub = state.curId && (state.items[findIdx(state.curId)]||{}).sub;
+  b.classList.toggle('act', !!(hasSub && state.subOn));
+  b.textContent = hasSub ? (state.subOn ? '字幕开' : '字幕关') : '字幕';
+}
 function updateNow(it){
   $('#nowTitle').textContent = it.name;
   $('#nowSub').innerHTML = `${esc(it.group||'')} · ${fmtSize(it.size)} · <span id="nowRateTxt">${state.rate.toFixed(1)}×</span>`;
-  $('#winTitle').textContent = it.name + ' — K 哥课程';
+  $('#winTitle').textContent = it.name + ' — 音频播放器';
 }
 function togglePlay(){
   if(!state.curId){
@@ -359,6 +400,17 @@ function cycleSleep(){
     }
   }, 5000);
 }
+$('#btnSub').addEventListener('click', ()=>{
+  const it = state.items[findIdx(state.curId)];
+  if(!(it && it.sub)){ toast('当前音频没有字幕'); return; }  /* 无字幕：优先提示，不切换开关 */
+  state.subOn = !state.subOn;
+  localStorage.setItem(LS.sub, state.subOn ? '1':'0');
+  const tr = document.getElementById('subTrack');
+  tr.track.mode = state.subOn ? 'showing' : 'disabled';
+  if(state.subOn) renderSubLine(''); else hideSubLine();
+  updateSubBtn();
+  toast(state.subOn ? '字幕已开启' : '字幕已隐藏');
+});
 $('#btnSleep').addEventListener('click', cycleSleep);
 
 /* ================= 恢复上次 ================= */
@@ -369,6 +421,7 @@ function restoreLast(){
     state.curId = cid;
     au.src = it.url;
     au.playbackRate = state.rate;   // 恢复记忆倍速（否则浏览器默认 1.0，UI 显示与实际不符）
+    attachSub(it);
     const p = loadPos(cid);
     $('#tDur').textContent = '';
     updateNow(it);
@@ -414,4 +467,7 @@ document.addEventListener('keydown', e=>{
 /* ================= init ================= */
 $('#btnMode').textContent = (MODES.find(m=>m.k===state.mode)||MODES[0]).label;
 $('#btnRate').textContent = state.rate.toFixed(1)+'×';
-boot();
+bindSubEvents();
+updateSubBtn();
+boot();
+

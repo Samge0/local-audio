@@ -1,14 +1,12 @@
-# K-Course Audio Player
+# Audio Player
 
-课程音频的 Mac 风格 WebUI 播放器（单文件前端、零前端依赖、Python 标准库后端）。
-
-![桌面版](.cache/shot-desktop.png)
+本地音频库的 WebUI 播放器，把任意音频文件按目录结构放入音频目录即可播放。
 
 ## 功能
 
 - **播放列表**：按目录分组自然排序、实时搜索、每首显示总时长与已听进度
 - **进度记忆**：记住每首的上次播放位置 + 上次播放的曲目，刷新/重开自动恢复
-- **倍速播放**：0.1 ~ 4.0（预设 0.5/0.75/1/1.25/1.5/1.75/2/2.5/3/4 + ±0.1 微调）
+- **倍速播放**：0.1 ~ 4.0（预设 0.5/0.75/1/1.25/1.5/1.75/2/2.5/3/4 + ±0.1 微调），全局记忆
 - **播放模式**：顺序 / 列表循环 / 单曲循环 / 随机
 - **其他**：±15s 快进退、定时停止（5~60 分钟）、键盘快捷键（空格 / ←→ / ↑↓）、深色模式自适应
 - **Mac 风格 UI**：毛玻璃窗口、交通灯、60s/圈慢速黑胶唱片、移动端自适应（≤899px 播放器置顶）
@@ -22,7 +20,6 @@
 # Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 # macOS/Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
 
-cd kcourse-audio
 uv venv --python 3.13
 ```
 
@@ -64,17 +61,17 @@ python server.py
 ## 项目结构
 
 ```
-kcourse-audio/
+.
 ├── config.py           # 统一配置：解析 .env → settings（全项目唯一路径来源）
 ├── server.py           # 后端：静态文件 + /api/list + 音频 Range 流式
-├── index.html          # 前端（单文件，无构建、无外部依赖）
+├── static/             # 前端
+│   ├── index.html      # 结构
+│   ├── css/style.css   # 样式
+│   └── js/app.js       # 逻辑
 ├── requirements.txt    # pip 依赖（带版本号）
 ├── .env.example        # 环境变量模板（复制为 .env 使用）
 ├── 启动.bat            # Windows 一键启动
-├── test_e2e.py         # Playwright E2E 回归
-├── test_ui.py          # DOM 级 UI 质检
-├── take_shots.py       # 截图工具（输出到 .cache/）
-├── .cache/             # 本地测试产物 + 一次性临时脚本（git 忽略）
+├── .cache/             # git 忽略：本地测试产物 + 测试脚本 + 一次性临时脚本
 └── audio/              # 音频资产（git 忽略，体积大）
 ```
 
@@ -86,24 +83,6 @@ kcourse-audio/
 | `KAUDIO_PORT` | 服务器端口 | `8792` |
 | `FFPROBE_PATH` | ffprobe 路径（探测总时长用，留空用 PATH） | PATH 查找 |
 | `CACHE_DIR` | 本地测试产物目录 | `./.cache` |
-
-## 音频从哪来？
-
-本项目只负责**播放**。音频文件如何得到（从视频提取、压缩转码等）属于一次性临时操作：
-
-- 临时脚本统一放在 `.cache/tmp_scripts/`（git 忽略），路径用脚本内变量赋值，不进配置、不进版本库
-- 历史用过：ffmpeg 从课程视频无损提取 AAC 音轨（`-c:a copy` → m4a）、Opus 24k/48k 单声道极限压缩（3.54GB → 0.64GB，省 82%）
-- 重新生成的音频放入 `AUDIO_DIR` 即可被播放器识别
-
-## 测试
-
-```bash
-python test_e2e.py   # Playwright E2E：播放/记忆/倍速/搜索/上下首/模式/移动端
-python test_ui.py    # DOM 质检：布局/断点/动画/像素
-python take_shots.py # 生成截图到 .cache/
-```
-
-首次跑测试需 `playwright install chromium`。
 
 ## API
 

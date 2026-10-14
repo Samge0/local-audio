@@ -1,0 +1,36 @@
+# --- 运行时数据（必须挂卷，不入镜像） ---
+audio/
+course_src/
+.env
+
+# --- 测试/临时产物 ---
+.cache/
+.coverage
+htmlcov/
+.pytest_cache/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- Git / CI / IDE / OS ---
+.git/
+.gitignore
+.github/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Docker 自身 ---
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# --- 文档 ---
+README.md
+*.md
+!static/**/*.md
