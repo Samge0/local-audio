@@ -103,12 +103,29 @@ input{font-family:inherit}
 .playlist{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;padding:0 8px 90px}
 .playlist::-webkit-scrollbar{width:8px}
 .playlist::-webkit-scrollbar-thumb{background:rgba(120,120,128,.35);border-radius:4px;border:2px solid transparent;background-clip:content-box}
+/* 分组：可折叠容器。组体 grid-rows 1fr→0fr 丝滑高度动画（内容 min-height:0 才能收拢） */
+.group{ }
+.group-body{display:grid;grid-template-rows:1fr;transition:grid-template-rows .22s ease}
+.group.folded .group-body{grid-template-rows:0fr}
+.group-inner{min-height:0;overflow:hidden}
 .group-title{
+  display:flex;align-items:center;gap:6px;
   font-size:11.5px;font-weight:700;color:var(--text3);
-  padding:14px 10px 6px;letter-spacing:.5px;text-transform:uppercase;
-  position:sticky;top:0;
+  padding:10px;letter-spacing:.5px;text-transform:uppercase;
+  position:sticky;top:0;cursor:pointer;user-select:none;
+  line-height:1;
   background:linear-gradient(var(--bg2) 82%,transparent);
+  border-radius:8px;
 }
+@media (hover:hover){.group-title:hover{color:var(--text2)}}
+.group-title .gt-name{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.group-title .gt-count{
+  font-size:10px;font-weight:600;color:var(--text3);opacity:.75;
+  background:rgba(120,120,128,.14);border-radius:999px;padding:2px 7px;
+  font-variant-numeric:tabular-nums;flex:0 0 auto;
+}
+.group-title .gt-chev{width:12px;height:12px;flex:0 0 auto;opacity:.6;transition:transform .2s ease}
+.group.folded .gt-chev{transform:rotate(-90deg)}
 @media (min-width:900px){.group-title{background:linear-gradient(var(--glass) 82%,transparent)}}
 .track{
   display:flex;align-items:center;gap:10px;
@@ -242,6 +259,9 @@ input[type=range].sl::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
 .cbtn.side{color:var(--text2)}
 .cbtn.on{color:var(--accent)}
 .cbtn svg{width:22px;height:22px}
+/* ±15s 圆弧的几何最低点(23.85+1px描边)略超 24 viewBox，默认会被裁平；
+   放开绘制边界，其余图标内容均在框内不受影响 */
+.cbtn svg{overflow:visible}
 .cbtn.main svg{width:26px;height:26px}
 
 .ctrls2{display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:10px}
@@ -286,6 +306,21 @@ input[type=range].sl::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
 }
 .pop .hint{font-size:10.5px;color:var(--text3);padding:6px 8px 0;text-align:center}
 
+/* 定时弹层：预设 3 列 + 自定义分钟输入 */
+.sleep-grid{grid-template-columns:repeat(3,1fr)}
+.sleep-pop .fine{gap:8px}
+.sleep-pop .fine .custom-min{
+  flex:1;min-width:0;border:none;outline:none;
+  background:rgba(120,120,128,.14);border-radius:8px;
+  padding:6px 10px;font-size:13px;color:var(--text);
+  font-variant-numeric:tabular-nums;
+}
+.sleep-pop .fine .custom-min:focus{background:rgba(120,120,128,.22)}
+.sleep-pop .fine #sleepGo{
+  width:auto;padding:6px 14px;font-size:12.5px;font-weight:600;
+  color:#fff;background:var(--grad);border-radius:8px;flex:0 0 auto;
+}
+
 /* toast */
 #toast{
   position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom));transform:translateX(-50%) translateY(16px);
@@ -302,23 +337,35 @@ input[type=range].sl::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
 }
 .spin{width:26px;height:26px;border:3px solid rgba(120,120,128,.25);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite}
 
-/* ---------- 移动端 ---------- */
+/* ---------- 移动端：整页滚动（播放器在上、列表在下，一起滚）+ 滚过后顶部吸附迷你条 ---------- */
 @media (max-width:899px){
-  .win{position:fixed;inset:0}
+  .win{position:static;height:auto;min-height:100dvh}
+  /* 整页滚动后文档高达数千 px：body 若保留斜向渐变+radial 晕会随文档拉成长色带、
+     晕圈落进列表区，观感"套了几层渐变"。移动端改纯色底，氛围晕收进播放器区局部 */
+  body{height:auto;min-height:100dvh;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:var(--bg1)}
+  .content{
+    background:
+      radial-gradient(120% 60% at 85% -10%, rgba(123,92,240,.16), transparent 60%),
+      radial-gradient(120% 50% at -10% 110%, rgba(84,114,240,.14), transparent 60%);
+  }
+  /* 分组头遮罩与玻璃窗/迷你条同一语言（--glass-strong），不再用异色的 bg2 渐变条 */
+  .group-title{background:linear-gradient(var(--glass-strong) 82%,transparent)}
   .main{flex-direction:column-reverse}
   .sidebar{
     flex:1 1 auto;border-right:none;border-top:1px solid var(--stroke);
-    min-height:0;
+    min-height:60dvh;
   }
-  .content{
-    flex:0 0 auto;border-bottom:none;
-    max-height:56dvh;
-  }
-  .stage{padding:16px 16px 8px;gap:14px}
+  /* 关键：移动端列表不再是独立滚动容器。
+     残留的 overflow-y:auto + overscroll-behavior:contain 会吃掉触摸手势且禁止
+     滚动链传导（表现为按在列表上滑不动页面），整页滚动时必须放行为普通块 */
+  .playlist{overflow:visible;overscroll-behavior:auto;padding-bottom:40px}
+  .content{flex:0 0 auto;border-bottom:none}
+  .content-scroll{overflow:visible}
+  .stage{overflow:visible;padding:16px;gap:14px}   /* 上下对称；字幕已在文档流内自撑高度 */
   .artwork{width:min(210px,48vw)}
   .art-wrap{width:min(210px,48vw)}
   .now-title{font-size:15px}
-  .player{padding:8px 14px calc(10px + env(safe-area-inset-bottom))}
+  .player{padding:10px 14px calc(10px + env(safe-area-inset-bottom))}
   .ctrls{gap:14px;margin-top:2px}
   .cbtn{width:36px;height:36px}
   .cbtn.main{width:46px;height:46px}
@@ -327,8 +374,36 @@ input[type=range].sl::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
   .titlebar{padding:0 12px}
   .lights{gap:7px}
   .light{width:11px;height:11px}
-  .content-scroll{overflow:visible}
-  .stage{overflow:visible}
+  .playlist{padding-bottom:40px}
+}
+@media (max-width:899px){
+  /* 迷你吸附条：默认藏在屏幕上方外，滚过播放器后滑入 */
+  .mini-bar{
+    position:fixed;top:0;left:0;right:0;z-index:60;
+    display:flex;align-items:center;gap:8px;
+    padding:8px 10px calc(8px);
+    padding-top:calc(8px + env(safe-area-inset-top));
+    background:var(--glass-strong);
+    backdrop-filter:blur(24px) saturate(1.6);
+    -webkit-backdrop-filter:blur(24px) saturate(1.6);
+    border-bottom:1px solid var(--stroke);
+    transform:translateY(-110%);
+    transition:transform .22s ease;
+    will-change:transform;
+  }
+  .mini-bar.show{transform:translateY(0)}
+  .mini-bar .cbtn{width:32px;height:32px;flex:0 0 auto}
+  .mini-bar .cbtn.main{width:38px;height:38px}
+  .mb-info{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.25;cursor:pointer}
+  .mb-title{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mb-sub{font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mini-bar.tall .mb-title{font-size:11px}
+  .mini-bar .mb-search{flex:0 0 auto;width:34%;min-width:86px;padding:5px 8px;background:rgba(120,120,128,.14)}
+  .mini-bar .mb-search input{font-size:13px}
+  .mini-bar .chip{padding:5px 8px;font-size:11.5px;flex:0 0 auto}
+}
+@media (min-width:900px){
+  .mini-bar{display:none}
 }
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
@@ -348,21 +423,34 @@ video::cue, audio::cue {
   .ctrls2 .chip{padding:5px 9px;font-size:11.5px}
 }
 
-/* ---------- 台词行（<audio> 不渲染 cue，自绘；固定宽高防抖动） ---------- */
+/* ---------- 台词行（<audio> 不渲染 cue，自绘悬浮层：不参与布局流，开关字幕零位移） ---------- */
+.stage{position:relative}
+.now-meta{position:relative}
 .sub-line{
-  width:min(640px,86%);
-  height:4.7em;
+  position:absolute;top:100%;left:50%;transform:translateX(-50%);
+  margin-top:4px;
+  /* 视口基准：父容器 .now-meta 在桌面 flex 列里是收缩宽(fit-content)，
+     百分比宽度会塌缩成 ~200px 导致一句话拆成多行 */
+  width:min(640px, 86vw);
+  max-height:4.7em;
   text-align:center;
   font-size:14.5px;line-height:1.7;
   color:var(--text2);
   word-break:break-word;
   overflow-y:auto;
   overscroll-behavior:contain;
-  flex:0 0 auto;
+  pointer-events:auto;
   user-select:text;
+  padding:0 6px;
 }
 .sub-line::-webkit-scrollbar{width:5px}
 .sub-line::-webkit-scrollbar-thumb{background:rgba(120,120,128,.35);border-radius:3px}
 @media (max-width:899px){
-  .sub-line{font-size:13px}
+  /* 移动端：字幕回归文档流——两行完整展示不被遮挡；隐藏时 display:none 高度归零无空白 */
+  .sub-line{
+    position:static;transform:none;margin-top:4px;
+    width:100%;max-height:none;
+    font-size:13px;
+    overflow:visible;
+  }
 }

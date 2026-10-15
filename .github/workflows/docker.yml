@@ -1,60 +1,57 @@
 name: build docker image
 
-# Controls when the action will run.
+# 推送 v* tag 触发；也可在 Actions 页手动触发（手动跑时无 tag，用 commit SHA 短哈希做版本）
 on:
   push:
     tags:
       - "v*"
-  
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-    inputs:
-      logLevel:
-        description: 'Log level'
-        required: true
-        default: 'warning'
-      tags:
-        description: 'Test scenario tags'
 
 jobs:
   buildx:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Get current date
-        id: date
-        run: echo "::set-output name=today::$(date +'%Y-%m-%d_%H-%M')"
+      # 版本号：push tag 时取 tag 名（如 v1.2.3）；手动触发时回退到 commit 短哈希
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "${{ github.ref_name }}" ]; then
+            echo "version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         id: buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
       - name: Available platforms
         run: echo ${{ steps.buildx.outputs.platforms }}
 
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push local-audio
-        uses: docker/build-push-action@v2
+      - name: Build and push audio-player
+        uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ./Dockerfile
           # Required architecture, all available architectures can be obtained in Available platforms step
           platforms: linux/amd64
-          # mirror push time
-          push: ${{ github.event_name != 'pull_request' }}
-          # tag multiple lists
+          push: true
+          # 版本号自动来自 git tag（另附 commit 短哈希与 latest）
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/local-audio:${{ steps.date.outputs.today }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/local-audio:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/local-audio:v1.0.0
-            
+            ${{ secrets.DOCKERHUB_USERNAME }}/audio-player:${{ steps.ver.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/audio-player:latest
+          labels: |
+            org.opencontainers.image.version=${{ steps.ver.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}

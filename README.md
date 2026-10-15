@@ -8,8 +8,9 @@
 - **进度记忆**：记住每首的上次播放位置 + 上次播放的曲目，刷新/重开自动恢复
 - **倍速播放**：0.1 ~ 4.0（预设 0.5/0.75/1/1.25/1.5/1.75/2/2.5/3/4 + ±0.1 微调），全局记忆
 - **播放模式**：顺序 / 列表循环 / 单曲循环 / 随机
+- **字幕**：同名 `.vtt` 自动挂载，一键开关；悬浮展示，开关不挤压版面；播放中途开启即时跟词
 - **其他**：±15s 快进退、定时停止（5~60 分钟）、键盘快捷键（空格 / ←→ / ↑↓）、深色模式自适应
-- **Mac 风格 UI**：毛玻璃窗口、交通灯、60s/圈慢速黑胶唱片、移动端自适应（≤899px 播放器置顶）
+- **Mac 风格 UI**：毛玻璃窗口、交通灯、60s/圈慢速黑胶唱片、移动端自适应（≤899px 整页滚动，滚过播放器后顶部吸附迷你控制条：播放/切集/搜索/倍速）
 
 ## 快速开始
 
@@ -53,10 +54,40 @@ cp .env.example .env    # Windows: copy .env.example .env
 
 ```bash
 python server.py
-# 或 Windows 双击 启动.bat
 ```
 
 打开 <http://127.0.0.1:8792>（端口可在 `.env` 改 `KAUDIO_PORT`）。手机同局域网访问 `http://<电脑IP>:8792`。
+
+### Docker 方式（可选）
+
+不想配 Python 环境时，用 Docker 一键起（镜像内已含 ffmpeg，ffprobe 自动可用）：
+
+```bash
+docker compose up -d --build
+```
+
+- 首次构建后访问 <http://127.0.0.1:8792>，与本地方式完全一致
+- **音频目录挂载**：默认挂 `./audio`；在 `.env` 里设 `AUDIO_DIR` 可挂任意宿主机目录：
+
+  ```bash
+  # .env
+  AUDIO_DIR=F:/music        # Windows 示例（macOS/Linux: /path/to/music）
+  KAUDIO_PORT=8792          # 宿主机端口，可改
+  ```
+
+  再执行 `docker compose up -d` 生效。
+- **前端热改**：`static/` 目录以挂卷方式覆盖进容器，改 HTML/CSS/JS 无需 rebuild，刷新页面即可
+- 时长缓存落在 `./.cache/docker`（可由 `CACHE_DIR` 改），删掉即重新探测
+- 健康检查内置（`/api/list` 30s 一次），`docker ps` 可见 healthy 状态；`restart: unless-stopped` 开机自启随 Docker
+- 常用命令：
+
+  ```bash
+  docker compose logs -f          # 看日志
+  docker compose restart          # 重启
+  docker compose down             # 停止
+  ```
+
+> Docker 方式下 `.env` 中的路径只影响宿主机侧挂载源；容器内路径固定为 `/app/audio`、`/app/.cache`，无需关心。
 
 ## 项目结构
 
@@ -70,7 +101,6 @@ python server.py
 │   └── js/app.js       # 逻辑
 ├── requirements.txt    # pip 依赖（带版本号）
 ├── .env.example        # 环境变量模板（复制为 .env 使用）
-├── 启动.bat            # Windows 一键启动
 ├── .cache/             # git 忽略：本地测试产物 + 测试脚本 + 一次性临时脚本
 └── audio/              # 音频资产（git 忽略，体积大）
 ```

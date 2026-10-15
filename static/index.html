@@ -6,9 +6,32 @@
 <title>音频播放器</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%236a8dff'/%3E%3Cstop offset='1' stop-color='%23a26bff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='14' fill='url(%23g)'/%3E%3Cpath d='M32 14v22m0 0c0-5-4-9-9-9m9 9c0-5 4-9 9-9' stroke='white' stroke-width='4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M20 42h24' stroke='white' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
 
-<link rel="stylesheet" href="static/css/style.css?v=1.0.0.0">
+<link rel="stylesheet" href="static/css/style.css?v=1.0.0">
 </head>
 <body>
+<!-- 移动端：滚过播放器后吸附顶部的迷你控制条（播放/搜索/倍速/切集） -->
+<div class="mini-bar" id="miniBar" aria-hidden="true">
+  <button class="cbtn side" id="mbPrev" aria-label="上一首">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg>
+  </button>
+  <button class="cbtn main" id="mbPlay" aria-label="播放/暂停">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+    <svg viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+  </button>
+  <button class="cbtn side" id="mbNext" aria-label="下一首">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
+  </button>
+  <div class="mb-info" id="mbInfo" title="回到播放器">
+    <div class="mb-title" id="mbTitle">未在播放</div>
+    <div class="mb-sub" id="mbSub" hidden></div>
+  </div>
+  <div class="search mb-search">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2.2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    <input id="mbq" type="search" placeholder="搜索…" autocomplete="off">
+  </div>
+  <button class="chip" id="mbRate" aria-label="倍速">1.0×</button>
+</div>
+
 <div class="win">
   <div class="titlebar">
     <div class="lights">
@@ -43,11 +66,11 @@
               <div class="hub"></div>
             </div>
           </div>
-          <div>
+          <div class="now-meta">
             <div class="now-title" id="nowTitle">未在播放</div>
             <div class="now-sub" id="nowSub">从左侧列表选择一个音频开始</div>
+            <div class="sub-line" id="subLine" hidden></div>
           </div>
-          <div class="sub-line" id="subLine" hidden></div>
         </div>
       </div>
 
@@ -62,14 +85,14 @@
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 6h2v12H7zM20 6v12l-9-6z"/></svg>
           </button>
           <button class="cbtn side" id="btnBack15" aria-label="后退15秒">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M4 9V4m0 5h5M4 9a9 9 0 1 1-2 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="16.5" font-size="8" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">15</text></svg>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 9V4m0 5h5M4 9a9 9 0 1 1-2 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="11" y="17.3" font-size="7.5" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">15</text></svg>
           </button>
           <button class="cbtn main" id="btnPlay" aria-label="播放/暂停">
             <svg id="icPlay" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
             <svg id="icPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
           </button>
           <button class="cbtn side" id="btnFwd15" aria-label="前进15秒">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M20 9V4m0 5h-5M20 9a9 9 0 1 0 2 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="12" y="16.5" font-size="8" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">15</text></svg>
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20 9V4m0 5h-5M20 9a9 9 0 1 0 2 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="13" y="17.3" font-size="7.5" font-weight="700" text-anchor="middle" fill="currentColor" font-family="sans-serif">15</text></svg>
           </button>
           <button class="cbtn side" id="btnNext" aria-label="下一首">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15 6h2v12h-2zM4 6l9 6-9 6z"/></svg>
@@ -91,7 +114,8 @@
 </audio>
 <div id="toast"></div>
 
-<script src="static/js/app.js?v=1.0.0.2"></script>
+<script src="static/js/app.js?v=1.0.0"></script>
+<script src="static/js/mini-bar.js?v=1.0.0"></script>
 
 </body>
 </html>
