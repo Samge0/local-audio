@@ -1,6 +1,7 @@
 # Audio Player
 
 本地音频库的 WebUI 播放器，把任意音频文件按目录结构放入音频目录即可播放。
+<img width="1280" height="800" alt="desktop-sub" src="https://github.com/user-attachments/assets/a0827e56-dfc6-4ead-852c-6319740670e4" />
 
 ## 功能
 
