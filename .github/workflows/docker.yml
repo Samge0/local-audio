@@ -40,7 +40,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push audio-player
+      - name: Build and push local-audio
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -50,8 +50,8 @@ jobs:
           push: true
           # 版本号自动来自 git tag（另附 commit 短哈希与 latest）
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/audio-player:${{ steps.ver.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/audio-player:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/local-audio:${{ steps.ver.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/local-audio:latest
           labels: |
             org.opencontainers.image.version=${{ steps.ver.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}

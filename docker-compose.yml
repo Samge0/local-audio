@@ -1,8 +1,8 @@
 services:
-  audio-player:
+  local-audio:
     build: .
-    image: audio-player:${TAG:-latest}
-    container_name: audio-player
+    image: local-audio:${TAG:-latest}
+    container_name: local-audio
     restart: unless-stopped
     ports:
       - "${KAUDIO_PORT:-8792}:8792"

@@ -205,30 +205,75 @@ class Handler(SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass  # 客户端断开（拖动进度条常见）
 
+    # --- 工具 ---
+    def _send_bytes(self, body: bytes, ctype: str, cache: str = "no-store"):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", cache)
+        self.end_headers()
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # 客户端提前断开（健康检查/轮询超时常见），非服务端故障
+
     # --- 路由 ---
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/list":
             items = scan_audio_with_dur()
-            return self._json({"ok": True, "count": len(items), "items": items})
+            body = json.dumps({"ok": True, "count": len(items), "items": items},
+                              ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass  # 健康检查/客户端超时断开，静默
+            return
         if path.startswith(AUDIO_URL_PREFIX):
             p = self._resolve_audio(path)
             if p is None:
                 return self._json({"ok": False, "error": "not found"}, 404)
             return self._stream_audio(p)
-        if path in ("/", "/index.html", "/static/"):
-            # HTML 不缓存：样式改动刷新即生效
-            if settings.INDEX_HTML.exists():
-                body = settings.INDEX_HTML.read_bytes()
+        if path in ("/", "/index.html", "/static/", "/static"):
+            # 明确指向 static/index.html（此前用 PROJECT_ROOT 相对定位，
+            # 项目目录改名 + 容器挂卷覆盖 /app/static 后存在回退到目录列表的风险）
+            index = PROJECT_ROOT / "static" / "index.html"
+            if index.exists():
+                body = index.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-store")
                 self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
                 return
-        return super().do_GET()
+            # index 缺失：明确 404，绝不回退到 SimpleHTTPRequestHandler 的目录列表
+            self.send_response(404)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(b"index not found")
+            return
+        # 其余路径走静态文件；仅对存在的具体文件放行，杜绝目录列表
+        candidate = (PROJECT_ROOT / urllib.parse.unquote(path.lstrip("/"))).resolve()
+        try:
+            candidate.relative_to(PROJECT_ROOT.resolve())
+        except ValueError:
+            return self._json({"ok": False, "error": "forbidden"}, 403)
+        if candidate.is_file():
+            return super().do_GET()
+        self.send_response(404)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(b"not found")
 
     def do_HEAD(self):
         parsed = urllib.parse.urlparse(self.path)
